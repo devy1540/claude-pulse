@@ -300,10 +300,62 @@ fn render_line(
     }
 
     if has_content {
-        Some(result)
+        Some(collapse_separators(&result))
     } else {
         None
     }
+}
+
+/// 연속된 구분자(│, |)를 하나로 합치고, 줄 앞뒤 구분자를 제거
+fn collapse_separators(s: &str) -> String {
+    let mut result = s.to_string();
+
+    // 연속 구분자 축소: " │ │ " → " │ ", " | | " → " | "
+    loop {
+        let prev = result.clone();
+        result = result.replace(" │ │ ", " │ ");
+        result = result.replace(" | | ", " | ");
+        if result == prev {
+            break;
+        }
+    }
+
+    // 줄 끝 구분자 제거
+    let trimmed = strip_ansi_simple(&result);
+    let trimmed_end = trimmed.trim_end();
+    if trimmed_end.ends_with('│') || trimmed_end.ends_with('|') {
+        // visible 텍스트에서 마지막 구분자 위치를 찾아 원본에서 제거
+        if let Some(pos) = result.rfind('│') {
+            let after = &result[pos + '│'.len_utf8()..];
+            if strip_ansi_simple(after).trim().is_empty() {
+                result = result[..pos].to_string() + after;
+            }
+        } else if let Some(pos) = result.rfind('|') {
+            let after = &result[pos + 1..];
+            if strip_ansi_simple(after).trim().is_empty() {
+                result = result[..pos].to_string() + after;
+            }
+        }
+    }
+
+    // 줄 시작 구분자 제거
+    let trimmed_start = strip_ansi_simple(&result);
+    let trimmed_start = trimmed_start.trim_start();
+    if trimmed_start.starts_with('│') || trimmed_start.starts_with('|') {
+        if let Some(pos) = result.find('│') {
+            let before = &result[..pos];
+            if strip_ansi_simple(before).trim().is_empty() {
+                result = before.to_string() + &result[pos + '│'.len_utf8()..];
+            }
+        } else if let Some(pos) = result.find('|') {
+            let before = &result[..pos];
+            if strip_ansi_simple(before).trim().is_empty() {
+                result = before.to_string() + &result[pos + 1..];
+            }
+        }
+    }
+
+    result.trim().to_string()
 }
 
 fn strip_ansi_simple(s: &str) -> String {

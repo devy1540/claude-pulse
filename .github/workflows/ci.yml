@@ -4,11 +4,33 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, edited, synchronize, reopened]
   push:
     branches:
       - main
 
 jobs:
+  lint-pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Check PR title format
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          PATTERN="^(feat|fix|docs|refactor|test|chore|ci|perf|style|build|revert)(\(.+\))?\!?: .+"
+          if [[ "$TITLE" =~ $PATTERN ]]; then
+            echo "PR title is valid: $TITLE"
+          else
+            echo "::error::PR 제목이 Conventional Commits 형식이 아닙니다."
+            echo "::error::형식: <type>: <description>"
+            echo "::error::예시: feat: {network} 플레이스홀더 추가"
+            echo "::error::타입: feat, fix, docs, refactor, test, chore"
+            exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
 

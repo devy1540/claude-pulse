@@ -1,0 +1,17 @@
+{
+  "name": "claude-pulse",
+  "description": "Blazing-fast Rust statusline HUD for Claude Code",
+  "owner": {
+    "name": "devy1540"
+  },
+  "plugins": [
+    {
+      "name": "cp",
+      "source": "./",
+      "description": "Blazing-fast Rust statusline HUD for Claude Code — context health, tool activity, agent tracking, and usage monitoring",
+      "version": "0.1.0",
+      "license": "MIT",
+      "keywords": ["hud", "statusline", "rust", "monitoring", "context", "pulse"]
+    }
+  ]
+}

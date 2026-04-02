@@ -18,11 +18,13 @@ Claude Code를 위한 초고속 Rust statusline HUD.
 
 ## 설치
 
-```bash
-/install github:devy1540/claude-pulse
+Claude Code에서 실행:
+
+```
+/plugin install github:devy1540/claude-pulse
 ```
 
-설치 후:
+statusline 설정:
 
 ```
 /cp:setup

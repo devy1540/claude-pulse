@@ -18,11 +18,13 @@ Real-time monitoring of context usage, token cost, output speed, tool activity, 
 
 ## Install
 
-```bash
-/install github:devy1540/claude-pulse
+In Claude Code, run:
+
+```
+/plugin install github:devy1540/claude-pulse
 ```
 
-Then run:
+Then set up the statusline:
 
 ```
 /cp:setup

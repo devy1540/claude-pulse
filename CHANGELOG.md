@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/devy1540/claude-pulse/compare/claude-pulse-v0.0.3...claude-pulse-v0.0.4) (2026-04-02)
+
+
+### Bug Fixes
+
+* 빈 플레이스홀더로 인한 연속 구분자(│ │) 제거 ([d262db4](https://github.com/devy1540/claude-pulse/commit/d262db4a8aa4133741ed5b0fe7d89cf3d30d4951))
+
 ## [0.0.3](https://github.com/devy1540/claude-pulse/compare/claude-pulse-v0.0.2...claude-pulse-v0.0.3) (2026-04-02)
 
 

@@ -1,5 +1,7 @@
 # claude-pulse
 
+[한국어](docs/README.ko.md)
+
 Blazing-fast Rust statusline HUD for Claude Code.
 
 Real-time monitoring of context usage, token cost, output speed, tool activity, and rate limits — all in your statusline.

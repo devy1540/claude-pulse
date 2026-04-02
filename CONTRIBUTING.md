@@ -1,9 +1,11 @@
 # Contributing to claude-pulse
 
+[한국어](docs/CONTRIBUTING.ko.md)
+
 ## Branch Strategy
 
-- `main` — 안정 브랜치. 직접 push 금지, PR만 허용
-- `feat/*`, `fix/*`, `docs/*` — 작업 브랜치
+- `main` — Stable branch. No direct push, PR only
+- `feat/*`, `fix/*`, `docs/*` — Working branches
 
 ```
 main ← PR ← feat/add-sparkline-color
@@ -11,7 +13,7 @@ main ← PR ← feat/add-sparkline-color
 
 ## Commit Convention
 
-[Conventional Commits](https://www.conventionalcommits.org/) 를 따릅니다:
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
 <type>: <description>
@@ -21,71 +23,71 @@ main ← PR ← feat/add-sparkline-color
 
 | Type | Description |
 |------|-------------|
-| `feat` | 새 기능 (새 플레이스홀더, 설정 옵션 등) |
-| `fix` | 버그 수정 |
-| `refactor` | 기능 변경 없는 코드 개선 |
-| `docs` | 문서 변경 (README, CONTRIBUTING, commands/) |
-| `test` | 테스트 추가/수정 |
-| `chore` | 빌드, CI, 의존성 등 |
+| `feat` | New feature (placeholder, config option, etc.) |
+| `fix` | Bug fix |
+| `refactor` | Code improvement without behavior change |
+| `docs` | Documentation (README, CONTRIBUTING, commands/) |
+| `test` | Add/update tests |
+| `chore` | Build, CI, dependencies |
 
-예시:
+Examples:
 ```
-feat: {network} 플레이스홀더 추가
-fix: sparkline 세션 리셋 안 되는 문제
-docs: README에 labels 설정 예시 추가
+feat: add {network} placeholder
+fix: sparkline session reset not working
+docs: add labels config example to README
 ```
 
 ## Pull Request
 
-1. 작업 브랜치에서 개발
-2. `cargo test` 통과 확인
-3. PR 생성 — 제목은 커밋 컨벤션 형식
-4. 리뷰 후 squash merge
+1. Develop on a working branch
+2. Ensure `cargo test` passes
+3. Create PR — title must follow commit convention format
+4. Review then squash merge
 
 ### PR Checklist
 
-- [ ] `cargo build --release` 성공
-- [ ] `cargo test` 전체 통과
-- [ ] 새 플레이스홀더 추가 시 `commands/configure.md`에 설명 추가
-- [ ] 새 설정 옵션 추가 시 `README.md` 업데이트
+- [ ] `cargo build --release` passes
+- [ ] `cargo test` passes
+- [ ] New placeholder → added to `commands/configure.md` and `README.md`
+- [ ] New config option → added to `README.md`
 
 ## Versioning
 
-[Semantic Versioning](https://semver.org/) 을 따릅니다:
+We follow [Semantic Versioning](https://semver.org/):
 
 ```
 MAJOR.MINOR.PATCH
 ```
 
-| 변경 유형 | 버전 | 예시 |
-|-----------|------|------|
-| 호환 안 되는 config 변경 | MAJOR | 플레이스홀더 이름 변경, config 키 삭제 |
-| 새 기능 (하위 호환) | MINOR | 새 플레이스홀더, 새 설정 옵션 |
-| 버그 수정 | PATCH | 색상 오류, 파싱 버그 |
+| Change Type | Version | Example |
+|-------------|---------|---------|
+| Breaking config change | MAJOR | Rename placeholder, remove config key |
+| New feature (backward compatible) | MINOR | New placeholder, new config option |
+| Bug fix | PATCH | Color bug, parsing error |
 
 ## Release
 
-[release-please](https://github.com/googleapis/release-please) 로 자동화됩니다:
+Automated via [release-please](https://github.com/googleapis/release-please):
 
-1. `feat:` / `fix:` 커밋이 main에 merge되면
-2. release-please가 자동으로 **Release PR** 생성
-   - `Cargo.toml` 버전 자동 업데이트
-   - `CHANGELOG.md` 자동 생성
-3. Release PR을 merge하면:
-   - 버전 태그 생성 (`v0.2.0`)
-   - 5개 플랫폼 바이너리 빌드
-   - GitHub Release 생성
+1. When `feat:` / `fix:` commits are merged into main
+2. release-please automatically creates a **Release PR**
+   - Auto-updates `Cargo.toml` version
+   - Auto-generates `CHANGELOG.md`
+3. When the Release PR is merged:
+   - Creates version tag (`v0.2.0`)
+   - Builds binaries for 5 platforms
+   - Creates GitHub Release
 
-**직접 버전을 올리거나 태그를 만들 필요 없습니다.**
+**No need to manually bump versions or create tags.**
 
-### 커밋과 버전의 관계
+### Commit Type → Version Bump
 
-| 커밋 타입 | 버전 변화 |
-|-----------|----------|
+| Commit Type | Version Change |
+|-------------|---------------|
 | `fix:` | PATCH (0.1.0 → 0.1.1) |
 | `feat:` | MINOR (0.1.0 → 0.2.0) |
-| `feat!:` 또는 `BREAKING CHANGE:` | MAJOR (0.1.0 → 1.0.0) |
-| `docs:`, `chore:`, `refactor:`, `test:` | 버전 변화 없음 |
+| `feat!:` or `BREAKING CHANGE:` | MAJOR (0.1.0 → 1.0.0) |
+| `docs:`, `chore:`, `refactor:`, `test:` | No version change |
 
 ## Development Setup
 
@@ -108,34 +110,34 @@ cp target/release/claude-pulse ~/.claude/bin/claude-pulse
 
 ```
 src/
-├── main.rs           # 진입점
-├── types.rs          # 전체 타입 정의
-├── stdin.rs          # stdin JSON 파싱
-├── transcript.rs     # JSONL 트랜스크립트 파싱 + 캐싱
-├── config.rs         # 설정 로드/병합
-├── config_reader.rs  # CLAUDE.md/rules/MCP/hooks 카운팅
-├── speed.rs          # 토큰 출력 속도 추적
-├── cost.rs           # 세션 비용 추정
-├── sparkline.rs      # 컨텍스트 추이 시각화
-├── extra_cmd.rs      # --extra-cmd 외부 명령 실행
-├── git.rs            # git 상태
-├── memory.rs         # 시스템 메모리
-├── terminal.rs       # 터미널 너비 감지
-├── version.rs        # Claude Code 버전
+├── main.rs           # Entry point
+├── types.rs          # Type definitions
+├── stdin.rs          # Stdin JSON parsing
+├── transcript.rs     # JSONL transcript parsing + caching
+├── config.rs         # Config loading/merging
+├── config_reader.rs  # CLAUDE.md/rules/MCP/hooks counting
+├── speed.rs          # Token output speed tracking
+├── cost.rs           # Session cost estimation
+├── sparkline.rs      # Context trend visualization
+├── extra_cmd.rs      # --extra-cmd external command execution
+├── git.rs            # Git status
+├── memory.rs         # System memory
+├── terminal.rs       # Terminal width detection
+├── version.rs        # Claude Code version
 └── render/
-    ├── mod.rs        # 렌더 진입 + 줄 래핑
-    ├── template.rs   # 핵심 템플릿 엔진 (resolve, rules)
-    ├── colors.rs     # ANSI 색상
-    ├── tools.rs      # 도구 활동 라인
-    ├── agents.rs     # 에이전트 상태 라인
-    └── todos.rs      # TODO 진행률 라인
+    ├── mod.rs        # Render entry + line wrapping
+    ├── template.rs   # Core template engine (resolve, rules)
+    ├── colors.rs     # ANSI colors
+    ├── tools.rs      # Tool activity line
+    ├── agents.rs     # Agent status line
+    └── todos.rs      # TODO progress line
 ```
 
-### 새 플레이스홀더 추가하기
+### Adding a New Placeholder
 
-1. `src/render/template.rs`의 `resolve()` 함수에 매치 추가
-2. 필요하면 `RuleVars`와 `auto_var_for_target()`에 규칙 변수 추가
-3. `default_lines()`에 디폴트 라인 반영 여부 결정
-4. `commands/configure.md`의 플레이스홀더 목록에 설명 추가
-5. `README.md`에 추가
-6. 테스트 작성
+1. Add match arm in `resolve()` in `src/render/template.rs`
+2. If needed, add rule variable to `RuleVars` and `auto_var_for_target()`
+3. Decide whether to include in `default_lines()`
+4. Add description to placeholder list in `commands/configure.md`
+5. Update `README.md`
+6. Write tests

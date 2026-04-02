@@ -83,20 +83,16 @@ Claude Code를 위한 초고속 Rust statusline HUD.
 | `{todos}` | `▶️ Task name (2/5)` |
 | `{todo_bar}` | `[━━━╌╌╌] 3/5` |
 
-### claude-pulse 전용
+### 시스템 & 메타
 | 플레이스홀더 | 출력 |
 |-------------|------|
 | `{speed}` | `~142 tok/s` — 토큰 출력 속도 |
 | `{cost}` | `~$0.29` — 세션 비용 추정 |
 | `{predict}` | `~15 msgs left` — autocompact 예측 |
-| `{extra}` | 외부 셸 명령 라벨 (`--extra-cmd`) |
-
-### 기타
-| 플레이스홀더 | 출력 |
-|-------------|------|
 | `{memory}` | `mem ━━━╌ 12.3GB / 16GB (77%)` |
 | `{env}` | `1 CLAUDE.md \| 3 rules \| 2 MCPs` |
 | `{duration}` | `⏱️ 46m` |
+| `{extra}` | 외부 셸 명령 라벨 (`--extra-cmd`) |
 
 ## 설정
 

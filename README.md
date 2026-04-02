@@ -83,20 +83,16 @@ Then run:
 | `{todos}` | `▶️ Task name (2/5)` |
 | `{todo_bar}` | `[━━━╌╌╌] 3/5` |
 
-### claude-pulse Exclusive
+### System & Meta
 | Placeholder | Output |
 |-------------|--------|
 | `{speed}` | `~142 tok/s` — output token speed |
 | `{cost}` | `~$0.29` — session cost estimate |
 | `{predict}` | `~15 msgs left` — autocompact prediction |
-| `{extra}` | Custom shell command label (`--extra-cmd`) |
-
-### Other
-| Placeholder | Output |
-|-------------|--------|
 | `{memory}` | `mem ━━━╌ 12.3GB / 16GB (77%)` |
 | `{env}` | `1 CLAUDE.md \| 3 rules \| 2 MCPs` |
 | `{duration}` | `⏱️ 46m` |
+| `{extra}` | Custom shell command label (`--extra-cmd`) |
 
 ## Configuration
 

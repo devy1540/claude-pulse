@@ -1,15 +1,31 @@
-name: Release
+name: Release Please
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: rust
+
   build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+
     strategy:
       matrix:
         include:
@@ -46,34 +62,14 @@ jobs:
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
-        run: |
-          cp target/${{ matrix.target }}/release/claude-pulse claude-pulse-${{ matrix.target }}
+        run: cp target/${{ matrix.target }}/release/claude-pulse claude-pulse-${{ matrix.target }}
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
-        run: |
-          cp target/${{ matrix.target }}/release/claude-pulse.exe claude-pulse-${{ matrix.target }}.exe
+        run: cp target/${{ matrix.target }}/release/claude-pulse.exe claude-pulse-${{ matrix.target }}.exe
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-pulse-${{ matrix.target }}
-          path: claude-pulse-${{ matrix.target }}*
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create release
+      - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
-          generate_release_notes: true
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: claude-pulse-${{ matrix.target }}*

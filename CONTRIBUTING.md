@@ -65,16 +65,27 @@ MAJOR.MINOR.PATCH
 
 ## Release
 
-릴리스는 **자동**입니다:
+[release-please](https://github.com/googleapis/release-please) 로 자동화됩니다:
 
-1. `Cargo.toml`의 `version` 을 올린다
-2. `main`에 merge한다
-3. CI가 자동으로:
+1. `feat:` / `fix:` 커밋이 main에 merge되면
+2. release-please가 자동으로 **Release PR** 생성
+   - `Cargo.toml` 버전 자동 업데이트
+   - `CHANGELOG.md` 자동 생성
+3. Release PR을 merge하면:
    - 버전 태그 생성 (`v0.2.0`)
    - 5개 플랫폼 바이너리 빌드
    - GitHub Release 생성
 
-**직접 태그를 만들 필요 없습니다.**
+**직접 버전을 올리거나 태그를 만들 필요 없습니다.**
+
+### 커밋과 버전의 관계
+
+| 커밋 타입 | 버전 변화 |
+|-----------|----------|
+| `fix:` | PATCH (0.1.0 → 0.1.1) |
+| `feat:` | MINOR (0.1.0 → 0.2.0) |
+| `feat!:` 또는 `BREAKING CHANGE:` | MAJOR (0.1.0 → 1.0.0) |
+| `docs:`, `chore:`, `refactor:`, `test:` | 버전 변화 없음 |
 
 ## Development Setup
 

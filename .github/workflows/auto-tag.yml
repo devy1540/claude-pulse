@@ -1,0 +1,40 @@
+name: Auto Tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.toml'
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check version change
+        id: version
+        run: |
+          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          PREVIOUS=$(git show HEAD~1:Cargo.toml 2>/dev/null | grep '^version' | head -1 | sed 's/.*"\(.*\)".*/\1/' || echo "")
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "previous=$PREVIOUS" >> $GITHUB_OUTPUT
+          if [ "$CURRENT" != "$PREVIOUS" ] && [ -n "$CURRENT" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          VERSION="v${{ steps.version.outputs.current }}"
+          git tag "$VERSION"
+          git push origin "$VERSION"

@@ -26,13 +26,30 @@ mod atty {
 
     pub fn is(stream: Stream) -> bool {
         match stream {
-            Stream::Stdin => unsafe { libc_isatty(0) != 0 },
+            Stream::Stdin => is_tty(0),
         }
     }
 
-    extern "C" {
-        #[link_name = "isatty"]
-        fn libc_isatty(fd: i32) -> i32;
+    #[cfg(unix)]
+    fn is_tty(fd: i32) -> bool {
+        extern "C" {
+            fn isatty(fd: i32) -> i32;
+        }
+        unsafe { isatty(fd) != 0 }
+    }
+
+    #[cfg(windows)]
+    fn is_tty(fd: i32) -> bool {
+        extern "C" {
+            #[link_name = "_isatty"]
+            fn isatty(fd: i32) -> i32;
+        }
+        unsafe { isatty(fd) != 0 }
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn is_tty(_fd: i32) -> bool {
+        false
     }
 }
 

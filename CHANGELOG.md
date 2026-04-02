@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/devy1540/claude-pulse/compare/claude-pulse-v0.0.2...claude-pulse-v0.0.3) (2026-04-02)
+
+
+### Bug Fixes
+
+* 초기 진입 시 7d/cost 표시 및 릴리스 버전 동기화 ([9cbedf7](https://github.com/devy1540/claude-pulse/commit/9cbedf74475b4bcee426828827ae2a4abd5c1533))
+
 ## [0.0.2](https://github.com/devy1540/claude-pulse/compare/claude-pulse-v0.0.1...claude-pulse-v0.0.2) (2026-04-02)
 
 

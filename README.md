@@ -18,15 +18,16 @@ Real-time monitoring of context usage, token cost, output speed, tool activity, 
 
 ## Install
 
-In Claude Code, run:
+In Claude Code:
 
-```
-/plugin install github:devy1540/claude-pulse
-```
+```bash
+# Add marketplace
+/plugin marketplace add devy1540/claude-pulse
 
-Then set up the statusline:
+# Install plugin
+/plugin install cp@claude-pulse
 
-```
+# Set up statusline binary
 /cp:setup
 ```
 

@@ -521,17 +521,26 @@ fn resolve(name: &str, ctx: &RenderContext) -> Option<String> {
         },
 
         "seven_day" => {
-            let d = ctx.usage_data.as_ref()?;
-            let pct = d.seven_day?;
-            let bar_str = custom_bar(pct, bar, |p| get_seven_day_color(p, colors));
-            let color = get_seven_day_color(pct, colors);
-            let reset = format_reset_time(d.seven_day_reset_at);
-            let reset_part = if reset.is_empty() {
-                String::new()
+            if let Some(d) = ctx.usage_data.as_ref() {
+                let pct = d.seven_day.unwrap_or(0);
+                let bar_str = custom_bar(pct, bar, |p| get_seven_day_color(p, colors));
+                let color = get_seven_day_color(pct, colors);
+                let reset = format_reset_time(d.seven_day_reset_at);
+                let reset_part = if reset.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({reset})")
+                };
+                Some(format!("{} {bar_str} {color}{pct}%{RESET}{reset_part}", label_color(&labels.seven_day, colors)))
             } else {
-                format!(" ({reset})")
-            };
-            Some(format!("{} {bar_str} {color}{pct}%{RESET}{reset_part}", label_color(&labels.seven_day, colors)))
+                let bar_str = custom_bar(0, bar, |p| get_seven_day_color(p, colors));
+                Some(format!(
+                    "{} {} {}",
+                    label_color(&labels.seven_day, colors),
+                    bar_str,
+                    label_color("--%", colors),
+                ))
+            }
         }
 
         // ── 활동 ──
@@ -614,7 +623,7 @@ fn resolve(name: &str, ctx: &RenderContext) -> Option<String> {
         }
 
         // ── 비용 추정 (신규) ──
-        "cost" => cost::estimate_cost(&ctx.stdin),
+        "cost" => Some(cost::estimate_cost(&ctx.stdin).unwrap_or_else(|| "~$0.00".to_string())),
 
         // ── autocompact 예측 (신규) ──
         "predict" => {

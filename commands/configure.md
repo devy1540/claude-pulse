@@ -50,7 +50,7 @@ Use AskUserQuestion:
 - options:
   - "Minimal" — Model + context only
   - "Standard" — Model + context + usage (default)
-  - "Overview" — 2-line compact with speed/cost/7d + emoji + line bar
+  - "Overview" — 2-line compact with cost/7d + emoji + line bar
   - "Full" — Everything enabled
   - "Compact" — Single-line classic layout
   - "Developer" — Template with tools/agents/git stats
@@ -74,7 +74,7 @@ Remove config file to use defaults.
 ```json
 {
   "lines": [
-    "{model} │ {project} {git} │ {speed} │ {duration}",
+    "{model} │ {project} {git} │ {duration}",
     "{context} │ {usage} │ {seven_day} │ {cost}"
   ],
   "bar": { "filled": "━", "empty": "╌", "width": 10 },

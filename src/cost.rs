@@ -48,12 +48,8 @@ pub fn estimate_cost(stdin: &StdinData) -> Option<String> {
         + cache_read * pricing.cache_read)
         / 1_000_000.0;
 
-    if cost < 0.001 {
-        return None;
-    }
-
     if cost < 0.01 {
-        Some(format!("~${:.3}", cost))
+        Some(format!("~${:.2}", cost))
     } else if cost < 1.0 {
         Some(format!("~${:.2}", cost))
     } else {

@@ -71,42 +71,6 @@ fn truncate_to_width(s: &str, max_width: usize) -> String {
     format!("{}{suffix}{RESET}", slice_visible(s, keep))
 }
 
-fn wrap_line_to_width(line: &str, max_width: usize) -> Vec<String> {
-    if max_width == 0 || visual_length(line) <= max_width {
-        return vec![line.to_string()];
-    }
-
-    // │ 또는 | 로 분할 시도
-    let parts: Vec<&str> = line.split(" │ ").collect();
-    if parts.len() <= 1 {
-        let parts2: Vec<&str> = line.split(" | ").collect();
-        if parts2.len() <= 1 {
-            return vec![truncate_to_width(line, max_width)];
-        }
-        return wrap_parts(&parts2, " | ", max_width);
-    }
-    wrap_parts(&parts, " │ ", max_width)
-}
-
-fn wrap_parts(parts: &[&str], sep: &str, max_width: usize) -> Vec<String> {
-    let mut wrapped: Vec<String> = Vec::new();
-    let mut current = parts[0].to_string();
-
-    for part in &parts[1..] {
-        let candidate = format!("{current}{sep}{part}");
-        if visual_length(&candidate) <= max_width {
-            current = candidate;
-        } else {
-            wrapped.push(truncate_to_width(&current, max_width));
-            current = part.to_string();
-        }
-    }
-    if !current.is_empty() {
-        wrapped.push(truncate_to_width(&current, max_width));
-    }
-    wrapped
-}
-
 pub fn render(ctx: &RenderContext) {
     let terminal_width = ctx.terminal_width.map(|w| w as usize);
 
@@ -122,7 +86,7 @@ pub fn render(ctx: &RenderContext) {
     let visible: Vec<String> = match terminal_width {
         Some(tw) => physical
             .into_iter()
-            .flat_map(|l| wrap_line_to_width(&l, tw))
+            .map(|l| truncate_to_width(&l, tw))
             .collect(),
         None => physical,
     };

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,13 +13,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[derive(Serialize, Deserialize)]
 struct TranscriptFileCache {
     path: String,
-    mtime_ms: u64,
     size: u64,
+    #[serde(default)]
+    mtime_ms: u64, // 하위호환용, 더 이상 체크 안 함
     tools: Vec<CachedTool>,
     agents: Vec<CachedAgent>,
     todos: Vec<CachedTodo>,
     session_start_ms: Option<u64>,
     session_name: Option<String>,
+    #[serde(default)]
+    task_ids: HashMap<String, usize>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -63,93 +66,144 @@ fn cache_path() -> std::path::PathBuf {
     get_hud_plugin_dir().join(".transcript-cache.json")
 }
 
-fn try_load_cache(transcript_path: &str) -> Option<TranscriptData> {
-    let content = std::fs::read_to_string(cache_path()).ok()?;
-    let cache: TranscriptFileCache = serde_json::from_str(&content).ok()?;
+// ── 파싱 상태 ──────────────────────────────────────────────
 
-    if cache.path != transcript_path {
-        return None;
+struct ParseState {
+    tool_map: HashMap<String, ToolEntry>,
+    agent_map: HashMap<String, AgentEntry>,
+    latest_todos: Vec<TodoItem>,
+    task_id_to_index: HashMap<String, usize>,
+    latest_slug: Option<String>,
+    custom_title: Option<String>,
+    session_start: Option<SystemTime>,
+}
+
+impl Default for ParseState {
+    fn default() -> Self {
+        Self {
+            tool_map: HashMap::new(),
+            agent_map: HashMap::new(),
+            latest_todos: Vec::new(),
+            task_id_to_index: HashMap::new(),
+            latest_slug: None,
+            custom_title: None,
+            session_start: None,
+        }
     }
+}
 
-    let meta = std::fs::metadata(transcript_path).ok()?;
-    let mtime_ms = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
-    if cache.mtime_ms != mtime_ms || cache.size != meta.len() {
-        return None;
-    }
-
-    Some(TranscriptData {
-        tools: cache
-            .tools
-            .into_iter()
-            .map(|t| ToolEntry {
-                id: t.id,
-                name: t.name,
-                target: t.target,
-                status: match t.status {
-                    0 => ToolStatus::Running,
-                    2 => ToolStatus::Error,
-                    _ => ToolStatus::Completed,
+impl ParseState {
+    /// 캐시에서 파싱 상태를 복원한다 (증분 파싱용).
+    fn from_cache(cache: &TranscriptFileCache) -> Self {
+        let mut tool_map = HashMap::new();
+        for t in &cache.tools {
+            tool_map.insert(
+                t.id.clone(),
+                ToolEntry {
+                    id: t.id.clone(),
+                    name: t.name.clone(),
+                    target: t.target.clone(),
+                    status: match t.status {
+                        0 => ToolStatus::Running,
+                        2 => ToolStatus::Error,
+                        _ => ToolStatus::Completed,
+                    },
+                    start_time: ms_to_system_time(t.start_ms),
+                    end_time: t.end_ms.map(ms_to_system_time),
                 },
-                start_time: ms_to_system_time(t.start_ms),
-                end_time: t.end_ms.map(ms_to_system_time),
-            })
-            .collect(),
-        agents: cache
-            .agents
-            .into_iter()
-            .map(|a| AgentEntry {
-                id: a.id,
-                agent_type: a.agent_type,
-                model: a.model,
-                description: a.description,
-                status: if a.status == 0 {
-                    AgentStatus::Running
-                } else {
-                    AgentStatus::Completed
+            );
+        }
+
+        let mut agent_map = HashMap::new();
+        for a in &cache.agents {
+            agent_map.insert(
+                a.id.clone(),
+                AgentEntry {
+                    id: a.id.clone(),
+                    agent_type: a.agent_type.clone(),
+                    model: a.model.clone(),
+                    description: a.description.clone(),
+                    status: if a.status == 0 {
+                        AgentStatus::Running
+                    } else {
+                        AgentStatus::Completed
+                    },
+                    start_time: ms_to_system_time(a.start_ms),
+                    end_time: a.end_ms.map(ms_to_system_time),
                 },
-                start_time: ms_to_system_time(a.start_ms),
-                end_time: a.end_ms.map(ms_to_system_time),
-            })
-            .collect(),
-        todos: cache
+            );
+        }
+
+        let latest_todos: Vec<TodoItem> = cache
             .todos
-            .into_iter()
+            .iter()
             .map(|t| TodoItem {
-                content: t.content,
+                content: t.content.clone(),
                 status: match t.status {
                     1 => TodoStatus::InProgress,
                     2 => TodoStatus::Completed,
                     _ => TodoStatus::Pending,
                 },
             })
-            .collect(),
-        session_start: cache.session_start_ms.map(ms_to_system_time),
-        session_name: cache.session_name,
-    })
+            .collect();
+
+        ParseState {
+            tool_map,
+            agent_map,
+            latest_todos,
+            task_id_to_index: cache.task_ids.clone(),
+            latest_slug: None,
+            custom_title: cache.session_name.clone(),
+            session_start: cache.session_start_ms.map(ms_to_system_time),
+        }
+    }
+
+    fn finalize(self) -> TranscriptData {
+        let mut tools: Vec<ToolEntry> = self.tool_map.into_values().collect();
+        tools.sort_by_key(|t| t.start_time);
+        let len = tools.len();
+        if len > 20 {
+            tools = tools.split_off(len - 20);
+        }
+
+        let mut agents: Vec<AgentEntry> = self.agent_map.into_values().collect();
+        agents.sort_by_key(|a| a.start_time);
+        let len = agents.len();
+        if len > 10 {
+            agents = agents.split_off(len - 10);
+        }
+
+        TranscriptData {
+            tools,
+            agents,
+            todos: self.latest_todos,
+            session_start: self.session_start,
+            session_name: self.custom_title.or(self.latest_slug),
+        }
+    }
 }
 
-fn save_cache(transcript_path: &str, data: &TranscriptData) {
-    let meta = match std::fs::metadata(transcript_path) {
-        Ok(m) => m,
-        Err(_) => return,
-    };
-    let mtime_ms = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+// ── 캐시 로드/저장 ─────────────────────────────────────────
 
+fn load_cache(transcript_path: &str) -> Option<TranscriptFileCache> {
+    let content = std::fs::read_to_string(cache_path()).ok()?;
+    let cache: TranscriptFileCache = serde_json::from_str(&content).ok()?;
+    if cache.path != transcript_path {
+        return None;
+    }
+    Some(cache)
+}
+
+fn save_cache(
+    transcript_path: &str,
+    file_size: u64,
+    data: &TranscriptData,
+    task_ids: &HashMap<String, usize>,
+) {
     let cache = TranscriptFileCache {
         path: transcript_path.to_string(),
-        mtime_ms,
-        size: meta.len(),
+        mtime_ms: 0,
+        size: file_size,
         tools: data
             .tools
             .iter()
@@ -196,6 +250,7 @@ fn save_cache(transcript_path: &str, data: &TranscriptData) {
             .collect(),
         session_start_ms: data.session_start.map(system_time_to_ms),
         session_name: data.session_name.clone(),
+        task_ids: task_ids.clone(),
     };
 
     let p = cache_path();
@@ -210,30 +265,51 @@ pub fn parse_transcript(transcript_path: &str) -> TranscriptData {
         return TranscriptData::default();
     }
 
-    if let Some(cached) = try_load_cache(transcript_path) {
-        return cached;
-    }
-
-    let result = parse_transcript_fresh(transcript_path);
-    save_cache(transcript_path, &result);
-    result
-}
-
-fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
-    let mut result = TranscriptData::default();
-
-    let file = match File::open(transcript_path) {
-        Ok(f) => f,
-        Err(_) => return result,
+    let current_size = match std::fs::metadata(transcript_path) {
+        Ok(m) => m.len(),
+        Err(_) => return TranscriptData::default(),
     };
 
-    let reader = BufReader::new(file);
-    let mut tool_map: HashMap<String, ToolEntry> = HashMap::new();
-    let mut agent_map: HashMap<String, AgentEntry> = HashMap::new();
-    let mut latest_todos: Vec<TodoItem> = Vec::new();
-    let mut task_id_to_index: HashMap<String, usize> = HashMap::new();
-    let mut latest_slug: Option<String> = None;
-    let mut custom_title: Option<String> = None;
+    if let Some(cache) = load_cache(transcript_path) {
+        if cache.size == current_size {
+            // 파일 변화 없음 → 캐시 히트
+            return ParseState::from_cache(&cache).finalize();
+        }
+        if current_size > cache.size {
+            // 파일이 커짐 → 증분 파싱 (새 라인만 파싱)
+            let mut state = ParseState::from_cache(&cache);
+            parse_lines(transcript_path, cache.size, &mut state);
+            let task_ids = state.task_id_to_index.clone();
+            let data = state.finalize();
+            save_cache(transcript_path, current_size, &data, &task_ids);
+            return data;
+        }
+        // 파일이 작아짐 (세션 재시작 등) → 전체 재파싱
+    }
+
+    // 전체 재파싱
+    let mut state = ParseState::default();
+    parse_lines(transcript_path, 0, &mut state);
+    let task_ids = state.task_id_to_index.clone();
+    let data = state.finalize();
+    save_cache(transcript_path, current_size, &data, &task_ids);
+    data
+}
+
+// ── 파싱 엔진 ──────────────────────────────────────────────
+
+fn parse_lines(transcript_path: &str, offset: u64, state: &mut ParseState) {
+    let file = match File::open(transcript_path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let mut reader = BufReader::new(file);
+
+    if offset > 0 {
+        if reader.seek(SeekFrom::Start(offset)).is_err() {
+            return;
+        }
+    }
 
     for line in reader.lines() {
         let line = match line {
@@ -253,10 +329,10 @@ fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
         // Track session name
         if entry.get("type").and_then(|v| v.as_str()) == Some("custom-title") {
             if let Some(title) = entry.get("customTitle").and_then(|v| v.as_str()) {
-                custom_title = Some(title.to_string());
+                state.custom_title = Some(title.to_string());
             }
         } else if let Some(slug) = entry.get("slug").and_then(|v| v.as_str()) {
-            latest_slug = Some(slug.to_string());
+            state.latest_slug = Some(slug.to_string());
         }
 
         let timestamp = entry
@@ -265,8 +341,8 @@ fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
             .and_then(parse_iso_timestamp)
             .unwrap_or_else(SystemTime::now);
 
-        if result.session_start.is_none() && entry.get("timestamp").is_some() {
-            result.session_start = Some(timestamp);
+        if state.session_start.is_none() && entry.get("timestamp").is_some() {
+            state.session_start = Some(timestamp);
         }
 
         let content = match entry
@@ -313,23 +389,52 @@ fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
                         start_time: timestamp,
                         end_time: None,
                     };
-                    agent_map.insert(id, agent_entry);
+                    state.agent_map.insert(id, agent_entry);
                 } else if name == "TodoWrite" {
-                    if let Some(todos) = input.and_then(|i| i.get("todos")).and_then(|v| v.as_array()) {
-                        latest_todos.clear();
-                        task_id_to_index.clear();
+                    if let Some(todos) =
+                        input.and_then(|i| i.get("todos")).and_then(|v| v.as_array())
+                    {
+                        state.latest_todos.clear();
+                        state.task_id_to_index.clear();
                         for todo in todos {
-                            let content = todo.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                            let status = todo.get("status").and_then(|v| v.as_str()).and_then(normalize_task_status).unwrap_or(TodoStatus::Pending);
-                            latest_todos.push(TodoItem { content, status });
+                            let content = todo
+                                .get("content")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let status = todo
+                                .get("status")
+                                .and_then(|v| v.as_str())
+                                .and_then(normalize_task_status)
+                                .unwrap_or(TodoStatus::Pending);
+                            state.latest_todos.push(TodoItem { content, status });
                         }
                     }
                 } else if name == "TaskCreate" {
-                    let subject = input.and_then(|i| i.get("subject")).and_then(|v| v.as_str()).unwrap_or("");
-                    let description = input.and_then(|i| i.get("description")).and_then(|v| v.as_str()).unwrap_or("");
-                    let content = if !subject.is_empty() { subject } else if !description.is_empty() { description } else { "Untitled task" };
-                    let status = input.and_then(|i| i.get("status")).and_then(|v| v.as_str()).and_then(normalize_task_status).unwrap_or(TodoStatus::Pending);
-                    latest_todos.push(TodoItem { content: content.to_string(), status });
+                    let subject = input
+                        .and_then(|i| i.get("subject"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let description = input
+                        .and_then(|i| i.get("description"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let content = if !subject.is_empty() {
+                        subject
+                    } else if !description.is_empty() {
+                        description
+                    } else {
+                        "Untitled task"
+                    };
+                    let status = input
+                        .and_then(|i| i.get("status"))
+                        .and_then(|v| v.as_str())
+                        .and_then(normalize_task_status)
+                        .unwrap_or(TodoStatus::Pending);
+                    state.latest_todos.push(TodoItem {
+                        content: content.to_string(),
+                        status,
+                    });
 
                     let task_id = input
                         .and_then(|i| i.get("taskId"))
@@ -339,22 +444,42 @@ fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
                             _ => id.clone(),
                         })
                         .unwrap_or_else(|| id.clone());
-                    task_id_to_index.insert(task_id, latest_todos.len() - 1);
+                    state
+                        .task_id_to_index
+                        .insert(task_id, state.latest_todos.len() - 1);
                 } else if name == "TaskUpdate" {
-                    if let Some(idx) = resolve_task_index(input, &task_id_to_index, &latest_todos) {
-                        if let Some(status) = input.and_then(|i| i.get("status")).and_then(|v| v.as_str()).and_then(normalize_task_status) {
-                            latest_todos[idx].status = status;
+                    if let Some(idx) = resolve_task_index(
+                        input,
+                        &state.task_id_to_index,
+                        &state.latest_todos,
+                    ) {
+                        if let Some(status) = input
+                            .and_then(|i| i.get("status"))
+                            .and_then(|v| v.as_str())
+                            .and_then(normalize_task_status)
+                        {
+                            state.latest_todos[idx].status = status;
                         }
-                        let subject = input.and_then(|i| i.get("subject")).and_then(|v| v.as_str()).unwrap_or("");
-                        let description = input.and_then(|i| i.get("description")).and_then(|v| v.as_str()).unwrap_or("");
-                        let content = if !subject.is_empty() { subject } else { description };
+                        let subject = input
+                            .and_then(|i| i.get("subject"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let description = input
+                            .and_then(|i| i.get("description"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let content = if !subject.is_empty() {
+                            subject
+                        } else {
+                            description
+                        };
                         if !content.is_empty() {
-                            latest_todos[idx].content = content.to_string();
+                            state.latest_todos[idx].content = content.to_string();
                         }
                     }
                 } else {
                     let target = extract_target(&name, input);
-                    tool_map.insert(
+                    state.tool_map.insert(
                         id.clone(),
                         ToolEntry {
                             id,
@@ -370,12 +495,17 @@ fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
 
             if block_type == "tool_result" {
                 if let Some(tool_use_id) = block.get("tool_use_id").and_then(|v| v.as_str()) {
-                    let is_error = block.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
-                    if let Some(tool) = tool_map.get_mut(tool_use_id) {
-                        tool.status = if is_error { ToolStatus::Error } else { ToolStatus::Completed };
+                    let is_error =
+                        block.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if let Some(tool) = state.tool_map.get_mut(tool_use_id) {
+                        tool.status = if is_error {
+                            ToolStatus::Error
+                        } else {
+                            ToolStatus::Completed
+                        };
                         tool.end_time = Some(timestamp);
                     }
-                    if let Some(agent) = agent_map.get_mut(tool_use_id) {
+                    if let Some(agent) = state.agent_map.get_mut(tool_use_id) {
                         agent.status = AgentStatus::Completed;
                         agent.end_time = Some(timestamp);
                     }
@@ -383,28 +513,9 @@ fn parse_transcript_fresh(transcript_path: &str) -> TranscriptData {
             }
         }
     }
-
-    let mut tools: Vec<ToolEntry> = tool_map.into_values().collect();
-    tools.sort_by_key(|t| t.start_time);
-    let len = tools.len();
-    if len > 20 {
-        tools = tools.split_off(len - 20);
-    }
-
-    let mut agents: Vec<AgentEntry> = agent_map.into_values().collect();
-    agents.sort_by_key(|a| a.start_time);
-    let len = agents.len();
-    if len > 10 {
-        agents = agents.split_off(len - 10);
-    }
-
-    result.tools = tools;
-    result.agents = agents;
-    result.todos = latest_todos;
-    result.session_name = custom_title.or(latest_slug);
-
-    result
 }
+
+// ── 헬퍼 함수 ──────────────────────────────────────────────
 
 fn extract_target(tool_name: &str, input: Option<&Value>) -> Option<String> {
     let input = input?;
@@ -417,8 +528,9 @@ fn extract_target(tool_name: &str, input: Option<&Value>) -> Option<String> {
         "Glob" | "Grep" => input.get("pattern").and_then(|v| v.as_str()).map(String::from),
         "Bash" => {
             let cmd = input.get("command").and_then(|v| v.as_str()).unwrap_or("");
-            if cmd.len() > 30 {
-                Some(format!("{}...", &cmd[..30]))
+            let truncated: String = cmd.chars().take(30).collect();
+            if truncated.len() < cmd.len() {
+                Some(format!("{truncated}..."))
             } else {
                 Some(cmd.to_string())
             }
@@ -491,7 +603,10 @@ fn parse_iso_timestamp(s: &str) -> Option<SystemTime> {
 
     let hour: i64 = time_parts[0].parse().ok()?;
     let min: i64 = time_parts[1].parse().ok()?;
-    let sec: i64 = time_parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let sec: i64 = time_parts
+        .get(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let millis: i64 = frac.get(..3).unwrap_or(frac).parse().ok().unwrap_or(0);
 
     // Days from epoch (simplified - not handling leap seconds)

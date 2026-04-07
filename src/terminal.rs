@@ -15,7 +15,21 @@ pub fn get_terminal_width() -> Option<u32> {
             }
         }
     }
+    // Try /dev/tty (controlling terminal, works even with piped fds)
+    #[cfg(unix)]
+    {
+        if let Some(w) = get_tty_width() {
+            return Some(w);
+        }
+    }
     None
+}
+
+#[cfg(unix)]
+fn get_tty_width() -> Option<u32> {
+    use std::os::unix::io::AsRawFd;
+    let tty = std::fs::File::open("/dev/tty").ok()?;
+    get_terminal_size_fd(tty.as_raw_fd())
 }
 
 #[cfg(unix)]

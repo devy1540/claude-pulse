@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.5](https://github.com/devy1540/claude-pulse/compare/claude-pulse-v0.0.4...claude-pulse-v0.0.5) (2026-04-07)
+
+
+### Bug Fixes
+
+* 긴 세션에서 statusline 사라지는 문제 및 라인 overflow 수정 ([a9f9374](https://github.com/devy1540/claude-pulse/commit/a9f9374888f1a224734015900da38b9054fc527f))
+
 ## [0.0.4](https://github.com/devy1540/claude-pulse/compare/claude-pulse-v0.0.3...claude-pulse-v0.0.4) (2026-04-02)
 
 
